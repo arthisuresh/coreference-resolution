@@ -241,7 +241,9 @@ def load_file(filename):
     with io.open(filename, 'rt', encoding='utf-8', errors='strict') as f:
         raw_text, tokens, text, utts_corefs, utts_speakers, corefs, index = [], [], [], [], [], [], 0
 
-        genre = filename.split('/')[14]
+        index_for_vm = 10
+        index_for_cpu = 14
+        genre = filename.split('/')[index_for_vm]
         for line in f:
             raw_text.append(line)
             cols = line.split()
@@ -324,14 +326,18 @@ def lookup_tensor(tokens, vectorizer):
 
 
 # Load in corpus, lazily load in word vectors.
-train_corpus = read_corpus('/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/data/train/')
-val_corpus = read_corpus('/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/datadevelopment/')
-test_corpus = read_corpus('/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/data/test/')
+path_for_vm_corpus = "/home/arts/conll-2012/v4/data/"
+path_for_vm_corpus_test = "/home/arts/conll-2012/v9/data/" 
+train_corpus = read_corpus(path_for_vm_corpus + 'train/')
+val_corpus = read_corpus(path_for_vm_corpus + 'development/')
+test_corpus = read_corpus(path_for_vm_corpus_test + 'test/')
+
+path_for_vm = "/home/arts/coreference-resolution/src/.vector_cache/"
+path_for_cpu = "/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/.vector_cache/"
 
 GLOVE = LazyVectors.from_corpus(train_corpus.vocab,
-                                name='glove.6B.300d.txt',
-                                cache='/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/.vector_cache/')
+                                name='glove.6B.300d.txt', cache=path_for_vm)
 
 TURIAN = LazyVectors.from_corpus(train_corpus.vocab,
                                  name='hlbl-embeddings-scaled.EMBEDDING_SIZE=50.txt',
-                                 cache='/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/.vector_cache/')
+                                 cache=path_for_vm)
