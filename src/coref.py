@@ -28,10 +28,10 @@ class Score(nn.Module):
 
         self.score = nn.Sequential(
             nn.Linear(embeds_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ReLU(inplace=False),
             nn.Dropout(0.20),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ReLU(inplace=False),
             nn.Dropout(0.20),
             nn.Linear(hidden_dim, 1)
         )
@@ -192,8 +192,8 @@ class DocumentEncoder(nn.Module):
                             batch_first=True)
 
         # Dropout
-        self.emb_dropout = nn.Dropout(0.50, inplace=True)
-        self.lstm_dropout = nn.Dropout(0.20, inplace=True)
+        self.emb_dropout = nn.Dropout(0.50, inplace=False)
+        self.lstm_dropout = nn.Dropout(0.20, inplace=False)
 
     def forward(self, doc):
         """ Convert document words to ids, embed them, pass through LSTM. """
@@ -486,7 +486,8 @@ class Trainer:
             # Compute loss, number gold links found, total gold links
             loss, mentions_found, total_mentions, \
                 corefs_found, total_corefs, corefs_chosen = self.train_doc(doc)
-
+            print(corefs_chosen)
+            print(total_corefs)
             # Track stats by document for debugging
             print(document, '| Loss: %f | Mentions: %d/%d | Coref recall: %d/%d | Corefs precision: %d/%d' \
                 % (loss, mentions_found, total_mentions,
@@ -519,11 +520,12 @@ class Trainer:
 
         # Predict coref probabilites for each span in a document
         spans, probs = self.model(document)
+        print(probs.shape)
+        print(probs)
 
         # Get log-likelihood of correct antecedents implied by gold clustering
         gold_indexes = to_cuda(torch.zeros_like(probs))
         for idx, span in enumerate(spans):
-
             # Log number of mentions found
             if (span.i1, span.i2) in gold_mentions:
                 mentions_found += 1
@@ -541,6 +543,7 @@ class Trainer:
                     # Progress logging for recall
                     corefs_found += len(golds)
                     found_corefs = sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach()
+                    print(found_corefs)
                     corefs_chosen += found_corefs.item()
                 else:
                     # Otherwise, set gold to dummy
@@ -548,7 +551,7 @@ class Trainer:
 
         # Negative marginal log-likelihood
         eps = 1e-8
-        loss = torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=1).clamp_(eps, 1-eps), dim=0) * -1
+        loss = torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=1).clamp_(eps, 1-eps)), dim=0) * -1
 
         # Backpropagate
         loss.backward()
@@ -622,11 +625,11 @@ class Trainer:
             for i1, i2 in cluster:
 
                 if i1 == i2:
-                    token_tags[i1].append(f'({idx})')
+                    token_tags[i1].append("({idx})".format(idx=idx))
 
                 else:
-                    token_tags[i1].append(f'({idx}')
-                    token_tags[i2].append(f'{idx})')
+                    token_tags[i1].append("({idx}".format(idx=idx))
+                    token_tags[i2].append("{idx})".format(idx=idx))
 
         doc.tags = ['|'.join(t) if t else '-' for t in token_tags]
 

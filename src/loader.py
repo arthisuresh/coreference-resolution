@@ -323,14 +323,14 @@ def lookup_tensor(tokens, vectorizer):
 
 
 # Load in corpus, lazily load in word vectors.
-train_corpus = read_corpus('../data/train/')
-val_corpus = read_corpus('../data/development/')
-test_corpus = read_corpus('../data/test/')
+train_corpus = read_corpus('/home/arts/conll-2012/v4/data/train/')
+val_corpus = read_corpus('/home/arts/conll-2012/v4/data/development/')
+test_corpus = read_corpus('/home/arts/conll-2012/v9/data/test/')
 
 GLOVE = LazyVectors.from_corpus(train_corpus.vocab,
-                                name='glove.840B.300d.txt',
-                                cache='/Users/sob/github/.vector_cache/')
+                                name='glove.6B.300d.txt',
+                                cache='/home/arts/coreference-resolution/src/.vector_cache/')
 
 TURIAN = LazyVectors.from_corpus(train_corpus.vocab,
-                                 name='hlbl-embeddings-scaled.EMBEDDING_SIZE=50',
-                                 cache='/Users/sob/github/.vector_cache/')
+                                 name='hlbl-embeddings-scaled.EMBEDDING_SIZE=50.txt',
+                                 cache='/home/arts/coreference-resolution/src/.vector_cache/')
