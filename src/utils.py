@@ -1,4 +1,5 @@
 import torch
+from pprint import pprint
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence, pack_sequence
@@ -146,7 +147,13 @@ def extract_gold_corefs(document):
                             for gold in gold_links.values()])
     gold_corefs = sorted(gold_corefs)
     total_corefs = len(gold_corefs)
-
+    # print("GOLD:")
+    # pprint(gold_corefs)
+    # pprint([(' '.join(document.tokens[s[0][0]:(s[0][1]+1)]), ' '.join(document.tokens[s[1][0]:(s[1][1]+1)])) for s in gold_corefs])
+    # pprint(total_corefs)
+    # pprint(gold_mentions)
+    # pprint([' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gold_mentions])
+    # pprint(total_mentions)
     return gold_corefs, total_corefs, gold_mentions, total_mentions
 
 def compute_idx_spans(sentences, L=10):

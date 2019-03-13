@@ -18,6 +18,7 @@ from subprocess import Popen, PIPE
 from boltons.iterutils import pairwise
 from loader import *
 from utils import *
+from pprint import pprint
 
 
 class Score(nn.Module):
@@ -25,7 +26,7 @@ class Score(nn.Module):
     """
     def __init__(self, embeds_dim, hidden_dim=150):
         super().__init__()
-
+        # two layer FFNN
         self.score = nn.Sequential(
             nn.Linear(embeds_dim, hidden_dim),
             nn.ReLU(inplace=False),
@@ -479,15 +480,17 @@ class Trainer:
         epoch_loss, epoch_mentions, epoch_corefs, epoch_identified = [], [], [], []
 
         for document in tqdm(batch):
-
             # Randomly truncate document to up to 50 sentences
             doc = document.truncate()
 
             # Compute loss, number gold links found, total gold links
             loss, mentions_found, total_mentions, \
                 corefs_found, total_corefs, corefs_chosen = self.train_doc(doc)
-            print(corefs_chosen)
-            print(total_corefs)
+            # print("Corefs Chosen: {corefs_chosen}, Corefs Found: {corefs_found}, Total Corefs: {total_corefs}".format(
+            #     corefs_chosen=corefs_chosen,
+            #     corefs_found=corefs_found,
+            #     total_corefs=total_corefs
+            # ))
             # Track stats by document for debugging
             print(document, '| Loss: %f | Mentions: %d/%d | Coref recall: %d/%d | Corefs precision: %d/%d' \
                 % (loss, mentions_found, total_mentions,
@@ -497,7 +500,7 @@ class Trainer:
             epoch_mentions.append(safe_divide(mentions_found, total_mentions))
             epoch_corefs.append(safe_divide(corefs_found, total_corefs))
             epoch_identified.append(safe_divide(corefs_chosen, total_corefs))
-
+            # assert False
         # Step the learning rate decrease scheduler
         self.scheduler.step()
 
@@ -520,17 +523,23 @@ class Trainer:
 
         # Predict coref probabilites for each span in a document
         spans, probs = self.model(document)
-        print(probs.shape)
-        print(probs)
-
         # Get log-likelihood of correct antecedents implied by gold clustering
         gold_indexes = to_cuda(torch.zeros_like(probs))
+        # print("PREDICTED:")
+        # pprint([' '.join(document.tokens[span.i1:span.i2+1]) for span in spans])
         for idx, span in enumerate(spans):
+            #print("Predicted Coreferences")
+            # pprint([(' '.join(
+            #     document.tokens[link[0][0]:(link[0][1]+1)]),
+            #     ' '.join(document.tokens[link[1][0]:(link[1][1]+1)]))
+            #     for i, link in enumerate(span.yi_idx)])
             # Log number of mentions found
             if (span.i1, span.i2) in gold_mentions:
                 mentions_found += 1
-
+                # print("Found mention {}".format(' '.join(document.tokens[span.i1:span.i2+1])))
                 # Check which of these tuples are in the gold set, if any
+                
+                #print((' '.join(document.tokens[s[0][0]:(s[0][1]+1)]), ' '.join(document.tokens[s[1][0]:(s[1][1]+1)])) for i, s in enumerate(span.yi_idx))
                 golds = [
                     i for i, link in enumerate(span.yi_idx)
                     if link in gold_corefs
@@ -543,7 +552,6 @@ class Trainer:
                     # Progress logging for recall
                     corefs_found += len(golds)
                     found_corefs = sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach()
-                    print(found_corefs)
                     corefs_chosen += found_corefs.item()
                 else:
                     # Otherwise, set gold to dummy
@@ -558,7 +566,7 @@ class Trainer:
 
         # Step the optimizer
         self.optimizer.step()
-
+        
         return (loss.item(), mentions_found, total_mentions,
                 corefs_found, total_corefs, corefs_chosen)
 
