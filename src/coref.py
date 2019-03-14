@@ -353,9 +353,11 @@ class PairwiseScore(nn.Module):
 
         # Score pairs of spans for coreference link
         s_ij = self.score(pairs)
+        # print(s_ij.size())
+        # print(s_ij.detach().numpy())
 
         # Compute pairwise scores for coreference links between each mention and
-        # its antecedents
+        # its antecedents - here we seem to enforce that an antecedent came before
         coref_scores = torch.sum(torch.cat((s_i, s_j, s_ij), dim=1), dim=1, keepdim=True)
 
         # Update spans with set of possible antecedents' indices, scores
@@ -379,13 +381,15 @@ class PairwiseScore(nn.Module):
 
         # Batch and softmax
         # get the softmax of the scores for each span in the document given
-        probs = [F.softmax(tensr) for tensr in with_epsilon]
-        
+        probs = [F.softmax(tensr, dim=0) for tensr in with_epsilon]
+        # print(probs[len(spans)-3].detach().numpy())
         # pad the scores for each one with a dummy value, 1000 so that the tensors can 
         # be of the same dimension for calculation loss and what not. 
+        
         probs, _ = pad_and_stack(probs, value=1000)
+        # print(probs[len(spans)-3].detach().numpy())
+        # print(probs[len(spans)-4].detach().numpy())
         probs = probs.squeeze()
-       
         return spans, probs
 
 
@@ -500,7 +504,6 @@ class Trainer:
             epoch_mentions.append(safe_divide(mentions_found, total_mentions))
             epoch_corefs.append(safe_divide(corefs_found, total_corefs))
             epoch_identified.append(safe_divide(corefs_chosen, total_corefs))
-            # assert False
         # Step the learning rate decrease scheduler
         self.scheduler.step()
 
@@ -523,6 +526,7 @@ class Trainer:
 
         # Predict coref probabilites for each span in a document
         spans, probs = self.model(document)
+        # print(probs.size())
         # Get log-likelihood of correct antecedents implied by gold clustering
         gold_indexes = to_cuda(torch.zeros_like(probs))
         # print("PREDICTED:")
@@ -544,23 +548,32 @@ class Trainer:
                     i for i, link in enumerate(span.yi_idx)
                     if link in gold_corefs
                 ]
-
+                # if len(golds) > 0:
+                #     print(golds)
+                #     print(probs[idx, golds].detach().numpy())
+                #     print(len(span.yi_idx))
+                #     print(probs[idx, len(span.yi_idx)].detach().numpy())
+                #     print((probs[idx, golds] > probs[idx, len(span.yi_idx)]).detach().numpy())
+                #     print(sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach().numpy())
                 # If gold_pred_idx is not empty, consider the probabilities of the found antecedents
                 if golds:
                     gold_indexes[idx, golds] = 1
 
                     # Progress logging for recall
                     corefs_found += len(golds)
+                    print(probs[idx, golds].detach().numpy())
+                    print(probs[idx, len(span.yi_idx)].detach().numpy())
                     found_corefs = sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach()
                     corefs_chosen += found_corefs.item()
                 else:
                     # Otherwise, set gold to dummy
                     gold_indexes[idx, len(span.yi_idx)] = 1
-
         # Negative marginal log-likelihood
         eps = 1e-8
-        loss = torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=1).clamp_(eps, 1-eps)), dim=0) * -1
-
+        # print(probs.size())
+        # print(gold_indexes.size())
+        # print(torch.sum(torch.mul(probs, gold_indexes), dim=1).size())
+        loss = torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=0).clamp(eps, 1-eps)), dim=0) * -1
         # Backpropagate
         loss.backward()
 

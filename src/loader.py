@@ -328,6 +328,7 @@ def lookup_tensor(tokens, vectorizer):
 # Load in corpus, lazily load in word vectors.
 path_for_vm_corpus = "/home/arts/conll-2012/v4/data/"
 path_for_vm_corpus_test = "/home/arts/conll-2012/v9/data/" 
+path_for_cpu_corpus = "/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/data/"
 train_corpus = read_corpus(path_for_vm_corpus + 'train/')
 val_corpus = read_corpus(path_for_vm_corpus + 'development/')
 test_corpus = read_corpus(path_for_vm_corpus_test + 'test/')
