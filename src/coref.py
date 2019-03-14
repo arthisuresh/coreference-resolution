@@ -561,8 +561,8 @@ class Trainer:
 
                     # Progress logging for recall
                     corefs_found += len(golds)
-                    print(probs[idx, golds].detach().numpy())
-                    print(probs[idx, len(span.yi_idx)].detach().numpy())
+                    #print(probs[idx, golds].detach().numpy())
+                    #print(probs[idx, len(span.yi_idx)].detach().numpy())
                     found_corefs = sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach()
                     corefs_chosen += found_corefs.item()
                 else:
