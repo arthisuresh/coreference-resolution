@@ -193,8 +193,8 @@ class DocumentEncoder(nn.Module):
                             batch_first=True)
 
         # Dropout
-        self.emb_dropout = nn.Dropout(0.50, inplace=True)
-        self.lstm_dropout = nn.Dropout(0.20, inplace=True)
+        self.emb_dropout = nn.Dropout(0.50, inplace=False)
+        self.lstm_dropout = nn.Dropout(0.20, inplace=False)
 
     def forward(self, doc):
         """ Convert document words to ids, embed them, pass through LSTM. """
@@ -462,11 +462,11 @@ class Trainer:
             self.save_model(str(datetime.now()))
 
             # Evaluate every eval_interval epochs
-            if epoch % eval_interval == 0:
-                print('\n\nEVALUATION\n\n')
-                self.model.eval()
-                results = self.evaluate(self.val_corpus)
-                print(results)
+            # if epoch % eval_interval == 0:
+            #    print('\n\nEVALUATION\n\n')
+            #    self.model.eval()
+            #    results = self.evaluate(self.val_corpus)
+            #    print(results)
 
     def train_epoch(self, epoch):
         """ Run a training epoch over 'steps' documents """
@@ -693,17 +693,22 @@ class Trainer:
         self.model.load_state_dict(state)
         self.model = to_cuda(self.model)
 
+    def model_in_eval(self):
+        self.model.eval()
 
 # # Initialize model, train
 model = CorefScore(embeds_dim=400, hidden_dim=200)
 # # ?? train for 150 epochs, each each train 100 documents
+
 trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
-trainer.train(150)
+trainer.load_model('2019-03-15_19:08:38.726141.pth')
+trainer.model_in_eval()
+# trainer.train(42)
 
 # model = CorefScore(embeds_dim=400, hidden_dim=200)
 # trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
 # print("Loading Model....")
 # trainer.load_model('2019-03-14 06:22:26.162407.pth')
-# print("Evaluating Model....")
-# trainer.evaluate(val_corpus, '../src/eval/scorer.pl')
+print("Evaluating Model....")
+trainer.evaluate(val_corpus, '../src/eval/scorer.pl')
 # print("Done.")
