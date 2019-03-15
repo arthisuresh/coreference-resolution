@@ -52,7 +52,6 @@ def pad_and_stack(tensors, pad_size=None, value=0):
                                 pad=(0, 0, 0, max(0, pad_size-size)),
                                 value=value)
                           for sent, size in zip(tensors, sizes)], dim=0)
-    print(padded.size())
     # padded = torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True, padding_value=value)
 
     return padded, sizes
