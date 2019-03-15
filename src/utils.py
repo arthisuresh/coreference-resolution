@@ -39,7 +39,7 @@ def pad_and_stack(tensors, pad_size=None, value=0):
     """ Pad and stack an uneven tensor of token lookup ids.
     Assumes num_sents in first dimension (batch_first=True)"""
 
-    # Get their original sizes (measured in number of tokens)
+    # # Get their original sizes (measured in number of tokens)
     sizes = [s.shape[0] for s in tensors]
 
     # Pad size will be the max of the sizes
@@ -52,12 +52,13 @@ def pad_and_stack(tensors, pad_size=None, value=0):
                                 pad=(0, 0, 0, max(0, pad_size-size)),
                                 value=value)
                           for sent, size in zip(tensors, sizes)], dim=0)
+    print(padded.size())
+    # padded = torch.nn.utils.rnn.pad_sequence(tensors, batch_first=True, padding_value=value)
 
     return padded, sizes
 
 def pack(tensors):
     """ Pack list of tensors, provide reorder indexes """
-
     # Get sizes
     sizes = [t.shape[0] for t in tensors]
 
@@ -66,7 +67,6 @@ def pack(tensors):
 
     # Resort the tensor accordingly
     sorted_tensors = [tensors[i] for i in size_sort]
-
     # Resort sizes in descending order
     sizes = sorted(sizes, reverse=True)
 
@@ -147,13 +147,7 @@ def extract_gold_corefs(document):
                             for gold in gold_links.values()])
     gold_corefs = sorted(gold_corefs)
     total_corefs = len(gold_corefs)
-    # print("GOLD:")
-    # pprint(gold_corefs)
-    # pprint([(' '.join(document.tokens[s[0][0]:(s[0][1]+1)]), ' '.join(document.tokens[s[1][0]:(s[1][1]+1)])) for s in gold_corefs])
-    # pprint(total_corefs)
-    # pprint(gold_mentions)
-    # pprint([' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gold_mentions])
-    # pprint(total_mentions)
+
     return gold_corefs, total_corefs, gold_mentions, total_mentions
 
 def compute_idx_spans(sentences, L=10):
@@ -162,10 +156,9 @@ def compute_idx_spans(sentences, L=10):
     idx_spans, shift = [], 0
     for sent in sentences:
         sent_spans = flatten([windowed(range(shift, len(sent)+shift), length)
-                              for length in range(1, L)])
+                              for length in range(1, L+1)])
         idx_spans.extend(sent_spans)
         shift += len(sent)
-
     return idx_spans
 
 def s_to_speaker(span, speakers):

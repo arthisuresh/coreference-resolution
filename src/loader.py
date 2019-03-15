@@ -75,7 +75,10 @@ class Document:
                     if token in ['.', '?', '!']]
 
         # Regroup (returns list of lists)
-        return [self.tokens[i1:i2] for i1, i2 in pairwise([0] + sent_idx)]
+        regroup = [self.tokens]
+        if len(sent_idx) > 0:
+            regroup = [self.tokens[i1:i2] for i1, i2 in pairwise([0] + sent_idx)]
+        return regroup
 
     def spans(self):
         """ Create Span object for each span """
@@ -329,16 +332,16 @@ def lookup_tensor(tokens, vectorizer):
 path_for_vm_corpus = "/home/arts/conll-2012/v4/data/"
 path_for_vm_corpus_test = "/home/arts/conll-2012/v9/data/" 
 path_for_cpu_corpus = "/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/data/"
-train_corpus = read_corpus(path_for_vm_corpus + 'train/')
-val_corpus = read_corpus(path_for_vm_corpus + 'development/')
-test_corpus = read_corpus(path_for_vm_corpus_test + 'test/')
+train_corpus = read_corpus(path_for_cpu_corpus + 'train/')
+val_corpus = read_corpus(path_for_cpu_corpus + 'development/')
+test_corpus = read_corpus(path_for_cpu_corpus + 'test/')
 
 path_for_vm = "/home/arts/coreference-resolution/src/.vector_cache/"
 path_for_cpu = "/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/.vector_cache/"
 
 GLOVE = LazyVectors.from_corpus(train_corpus.vocab,
-                                name='glove.6B.300d.txt', cache=path_for_vm)
+                                name='glove.6B.300d.txt', cache=path_for_cpu)
 
 TURIAN = LazyVectors.from_corpus(train_corpus.vocab,
                                  name='hlbl-embeddings-scaled.EMBEDDING_SIZE=50.txt',
-                                 cache=path_for_vm)
+                                 cache=path_for_cpu)
