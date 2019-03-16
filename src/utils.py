@@ -130,6 +130,7 @@ def extract_gold_corefs(document):
     # Compute number of mentions
     gold_mentions = set([coref['span'] for coref in document.corefs])
     total_mentions = len(gold_mentions)
+    # pprint([' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gold_mentions])
 
     # Compute number of coreferences
     for coref_entry in document.corefs:
@@ -141,12 +142,10 @@ def extract_gold_corefs(document):
         gold_links[label].append(span_idx) # get all spans corresponding to some label
 
     # Flatten all possible corefs, sort, get number
-    gold_corefs = flatten([[coref
-                            for coref in combinations(gold, 2)]
-                            for gold in gold_links.values()])
+    gold_corefs = flatten([[coref for coref in combinations(gold, 2)] for gold in gold_links.values()])
     gold_corefs = sorted(gold_corefs)
     total_corefs = len(gold_corefs)
-
+    # pprint([[' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gc] for gc in gold_corefs])
     return gold_corefs, total_corefs, gold_mentions, total_mentions
 
 def compute_idx_spans(sentences, L=10):

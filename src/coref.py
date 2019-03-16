@@ -459,14 +459,14 @@ class Trainer:
             self.train_epoch(epoch, *args, **kwargs)
 
             # Save often
-            self.save_model(str(datetime.now()))
+            self.save_model(epoch, str(datetime.now()).replace(' ', '_'))
 
             # Evaluate every eval_interval epochs
-            # if epoch % eval_interval == 0:
-            #    print('\n\nEVALUATION\n\n')
-            #    self.model.eval()
-            #    results = self.evaluate(self.val_corpus)
-            #    print(results)
+            if epoch % eval_interval == 0:
+                print('\n\nEVALUATION\n\n')
+                self.model.eval()
+                results = self.evaluate(self.val_corpus)
+                print(results)
 
     def train_epoch(self, epoch):
         """ Run a training epoch over 'steps' documents """
@@ -486,11 +486,7 @@ class Trainer:
             # Compute loss, number gold links found, total gold links
             loss, mentions_found, total_mentions, \
                 corefs_found, total_corefs, corefs_chosen = self.train_doc(doc)
-            # print("Corefs Chosen: {corefs_chosen}, Corefs Found: {corefs_found}, Total Corefs: {total_corefs}".format(
-            #     corefs_chosen=corefs_chosen,
-            #     corefs_found=corefs_found,
-            #     total_corefs=total_corefs
-            # ))
+
             # Track stats by document for debugging
             print(document, '| Loss: %f | Mentions: %d/%d | Coref recall: %d/%d | Corefs precision: %d/%d' \
                 % (loss, mentions_found, total_mentions,
@@ -509,11 +505,15 @@ class Trainer:
 
     def train_doc(self, document):
         """ Compute loss for a forward pass over a document """
-
         # Extract gold coreference links
-        gold_corefs, total_corefs, \
-            gold_mentions, total_mentions = extract_gold_corefs(document)
+        gold_corefs, total_corefs, gold_mentions, total_mentions = extract_gold_corefs(document)
+        # print(document.filename)
+        # pprint([[' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gc] for gc in gold_corefs])
+        gold_corefs, total_corefs, gold_mentions, total_mentions = extract_gold_corefs(document)
 
+        flattened_gold = flatten([[' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gc] for gc in gold_corefs])
+        if ',' in flattened_gold or """''""" in flattened_gold:
+            print(document.tokens)
         # Zero out optimizer gradients
         self.optimizer.zero_grad()
 
@@ -528,7 +528,7 @@ class Trainer:
         # print("PREDICTED:")
         # pprint([' '.join(document.tokens[span.i1:span.i2+1]) for span in spans])
         for idx, span in enumerate(spans):
-            #print("Predicted Coreferences")
+            # print("Predicted Coreferences")
             # pprint([(' '.join(
             #     document.tokens[link[0][0]:(link[0][1]+1)]),
             #     ' '.join(document.tokens[link[1][0]:(link[1][1]+1)]))
@@ -536,7 +536,7 @@ class Trainer:
             # Log number of mentions found
             if (span.i1, span.i2) in gold_mentions:
                 mentions_found += 1
-                # print("Found mention {}".format(' '.join(document.tokens[span.i1:span.i2+1])))
+                print("Found mention {}".format(' '.join(document.tokens[span.i1:span.i2+1])))
                 # Check which of these tuples are in the gold set, if any
                 
                 #print((' '.join(document.tokens[s[0][0]:(s[0][1]+1)]), ' '.join(document.tokens[s[1][0]:(s[1][1]+1)])) for i, s in enumerate(span.yi_idx))
@@ -544,11 +544,14 @@ class Trainer:
                     i for i, link in enumerate(span.yi_idx)
                     if link in gold_corefs
                 ]
-
                 # If gold_pred_idx is not empty, consider the probabilities of the found antecedents
                 if golds:
                     gold_indexes[idx, golds] = 1
-
+                    print("Found coreferences:")
+                    pprint([[' '.join(document.tokens[s[0]:(s[1]+1)]) for s in gc] for gc in [
+                    link for i, link in enumerate(span.yi_idx)
+                    if link in gold_corefs
+                ]])
                     # Progress logging for recall
                     corefs_found += len(golds)
                     found_corefs = sum((probs[idx, golds] > probs[idx, len(span.yi_idx)])).detach()
@@ -558,11 +561,10 @@ class Trainer:
                     gold_indexes[idx, len(span.yi_idx)] = 1
         # Negative marginal log-likelihood
         eps = 1e-8
-        # print(-1*torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=1)), dim=0).detach())
+
         loss = torch.sum(torch.log(torch.sum(torch.mul(probs, gold_indexes), dim=1).clamp_(eps, 1-eps)), dim=0) * -1
         # Backpropagate
         loss.backward()
-
         # Step the optimizer
         self.optimizer.step()
         
@@ -577,17 +579,18 @@ class Trainer:
         predicted_docs = [self.predict(doc) for doc in tqdm(val_corpus)]
         val_corpus.docs = predicted_docs
 
-        # Output results
+        # # Output results
         golds_file, preds_file = self.to_conll(val_corpus, eval_script)
 
         # Run perl script
         print('Running Perl evaluation script...')
-        p = Popen([eval_script, 'all', golds_file, preds_file], stdout=PIPE)
+        # p = Popen([eval_script, 'all', golds_file, preds_file], stdout=PIPE)
+        p = Popen([eval_script, 'all', '../preds/golds.txt', '../preds/predictions.txt'], stdout=PIPE)
         stdout, stderr = p.communicate()
         results = str(stdout).split('TOTALS')[-1]
 
         # Write the results out for later viewing
-        with open('../preds/results.txt', 'w+') as f:
+        with open('../preds/results2.txt', 'w+') as f:
             f.write(results)
             f.write('\n\n\n')
 
@@ -595,7 +598,6 @@ class Trainer:
 
     def predict(self, doc):
         """ Predict coreference clusters in document """
-
         # Set to eval mode
         self.model.eval()
 
@@ -607,12 +609,13 @@ class Trainer:
 
         # Cluster found coreference links
         for i, span in enumerate(spans):
-
+            # print("Span of Interest:" + ' '.join(doc.tokens[span.i1:span.i2+1]))
             # Loss implicitly pushes coref links above 0, rest below 0
             found_corefs = [idx
                             for idx, _ in enumerate(span.yi_idx)
                             if probs[i, idx] > probs[i, len(span.yi_idx)]]
-
+            # for f in found_corefs:
+            #     print("\t" + ' '.join(doc.tokens[spans[f].i1:spans[f].i2+1]) + ' ' + str(spans[f].i1) + ':' + str(spans[f].i2))
             # If we have any
             if any(found_corefs):
 
@@ -639,7 +642,6 @@ class Trainer:
                     token_tags[i2].append("{idx})".format(idx=idx))
 
         doc.tags = ['|'.join(t) if t else '-' for t in token_tags]
-
         return doc
 
     def to_conll(self, val_corpus, eval_script):
@@ -683,13 +685,26 @@ class Trainer:
 
         return golds_file, preds_file
 
-    def save_model(self, savepath):
+    def save_model(self, epoch, savepath):
         """ Save model state dictionary """
-        torch.save(self.model.state_dict(), savepath + '.pth')
+        state = {
+            'epoch': epoch,
+            'state_dict': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
+        }
+        torch.save(state, savepath + '.pth')
 
     def load_model(self, loadpath):
         """ Load state dictionary into model """
-        state = torch.load(loadpath, map_location="cpu")
+        state = torch.load(loadpath, map_location=torch.device('cpu'))
+        self.model.load_state_dict(state['state_dict'])
+        self.optimizer.load_state_dict(state['optimizer'])
+        self.scheduler.load_state_dict(state['scheduler'])
+        self.model = to_cuda(self.model)
+
+    def load_model_vanilla(self, loadpath):
+        state = torch.load(loadpath, map_location=torch.device('cpu'))
         self.model.load_state_dict(state)
         self.model = to_cuda(self.model)
 
@@ -698,17 +713,31 @@ class Trainer:
 
 # # Initialize model, train
 model = CorefScore(embeds_dim=400, hidden_dim=200)
+trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
+trainer.train(150)
 # # ?? train for 150 epochs, each each train 100 documents
 
-trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
-trainer.load_model('2019-03-15_19:08:38.726141.pth')
-trainer.model_in_eval()
-# trainer.train(42)
+
+# trainer.load_model("/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/2019-03-15_16:55:49.215081.pth")
+# trainer.train(90)
+# trainer.load_model_vanilla('/Users/arts/Desktop/cs224n/gap-coreference/2019-03-15_19:08:38.726141.pth')
+# trainer.model_in_eval()
 
 # model = CorefScore(embeds_dim=400, hidden_dim=200)
 # trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
 # print("Loading Model....")
-# trainer.load_model('2019-03-14 06:22:26.162407.pth')
-print("Evaluating Model....")
-trainer.evaluate(val_corpus, '../src/eval/scorer.pl')
+# trainer.model.eval()
+
+# print("Evaluating Model....")
+# results = trainer.evaluate(val_corpus, '../src/eval/scorer.pl')
+# print(str(results))
 # print("Done.")
+
+# filename = '/Users/arts/Desktop/cs224n/gap-coreference/e2e_coref_data/conll-2012/v4/data/train/data/english/annotations/pt/nt/42/nt_4207.v4_gold_conll'
+# print(filename)
+# documents = load_file(filename)
+# for doc in documents:
+#     gold_corefs, total_corefs, gold_mentions, total_mentions = extract_gold_corefs(doc)
+#     pprint([[' '.join(doc.tokens[s[0]:(s[1]+1)]) for s in gc] for gc in gold_corefs])
+#     pprint([' '.join(doc.tokens[s[0]:(s[1]+1)]) for s in gold_mentions])
+    

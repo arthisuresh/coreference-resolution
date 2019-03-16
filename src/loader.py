@@ -28,7 +28,7 @@ class Corpus:
         return self.docs[idx]
 
     def __repr__(self):
-        return 'Corpus containg %d documents' % len(self.docs)
+        return 'Corpus containing %d documents' % len(self.docs)
 
     def get_vocab(self):
         """ Set vocabulary for LazyVectors """
@@ -91,8 +91,22 @@ class Document:
         if len(self.sents) > MAX:
             i = random.sample(range(MAX, len(self.sents)), 1)[0]
             tokens = flatten(self.sents[i-MAX:i])
+            displaced_start_token_idx = len(flatten(self.sents[:i-MAX]))
+            displaced_end_token_idx = len(flatten(self.sents[:i]))
+            speakers = self.speakers[displaced_start_token_idx:displaced_end_token_idx]
+            truncated_corefs = []
+            for coref in self.corefs:
+                if not (coref['start'] < displaced_start_token_idx or coref['end'] >= displaced_end_token_idx):
+                    truncated_corefs.append(
+                        {
+                            'end': coref['end'] - displaced_start_token_idx,
+                            'label': coref['label'],
+                            'start': coref['start'] - displaced_start_token_idx,
+                            'span': (coref['start'] - displaced_start_token_idx, coref['end'] - displaced_start_token_idx)
+                        }
+                    )
             return self.__class__(c(self.raw_text), tokens,
-                                  c(self.corefs), c(self.speakers),
+                                  truncated_corefs, speakers,
                                   c(self.genre), c(self.filename))
         return self
 
@@ -272,17 +286,14 @@ def load_file(filename):
                 if cols[-1] != u'-':
                     coref_expr = cols[-1].split(u'|')
                     for token in coref_expr:
-
                         # Check if coref column token entry contains (, a number, or ).
                         match = re.match(r"^(\(?)(\d+)(\)?)$", token)
                         label = match.group(2)
-
                         # If it does, extract the coref label, its start index,
                         if match.group(1) == u'(':
                             corefs.append({'label': label,
                                            'start': index,
                                            'end': None})
-
                         if match.group(3) == u')':
                             for i in range(len(corefs)-1, -1, -1):
                                 if corefs[i]['label'] == label and corefs[i]['end'] is None:
