@@ -379,11 +379,11 @@ sub IdentifMentions {
         push(@remove, $i);
 				$main::repeated_mentions++;
 
-				# if ($main::repeated_mentions > 10)
-				# {
-				# 		print STDERR "Found too many repeated mentions (> 10) in the response, so refusing to score. Please fix the output.\n";
-				# 		exit 1;
-				# }
+				if ($main::repeated_mentions > 10)
+				{
+						print STDERR "Found too many repeated mentions (> 10) in the response, so refusing to score. Please fix the output.\n";
+						exit 1;
+				}
 
       }
       elsif (defined($id{"$mention->[0],$mention->[1]"})

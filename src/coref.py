@@ -19,6 +19,7 @@ from boltons.iterutils import pairwise
 from loader import *
 from utils import *
 from pprint import pprint
+from pytorch_pretrained_bert import BertTokenizer, BertModel
 
 
 class Score(nn.Module):
@@ -279,11 +280,15 @@ class MentionScore(nn.Module):
 
         # Get LSTM state for start, end indexes
         # TODO: figure out a way to batch
-        start_end = torch.stack([torch.cat((states[s.i1], states[s.i2]))
-                                 for s in spans])
+        # start_end = torch.stack([torch.cat((states[s.i1], states[s.i2]))
+        #                          for s in spans])
 
         # Cat it all together to get g_i, our span representation
-        g_i = torch.cat((start_end, attn_embeds, widths), dim=1)
+        print(states.size())
+        print(attn_embeds.size())
+        print(widths.size())
+        assert False
+        g_i = torch.cat((states, attn_embeds, widths), dim=1)
 
         # Compute each span's unary mention score
         mention_scores = self.score(g_i)
@@ -389,6 +394,39 @@ class PairwiseScore(nn.Module):
         return spans, probs
 
 
+class BERTDocumentEncoder():
+    def __init__(self):
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.bert_document_encoder = BertModel.from_pretrained('bert-base-uncased')
+
+    def embed(self, sent):
+        # get tokens
+        text = ' '.join(sent)
+        tokenized_text = self.tokenizer.tokenize(text)
+        indexed_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)
+        tokens_tensor = torch.tensor([indexed_tokens])
+        self.bert_document_encoder.eval()
+        with torch.no_grad():
+            encoded_layers, _ = self.bert_document_encoder(tokens_tensor)
+        sentence_encoding = torch.mean(torch.squeeze(torch.stack(encoded_layers[8:12])), dim=0)
+        sentence_embedding = torch.squeeze(torch.stack(encoded_layers[0:1]))
+        print(sentence_embedding)
+        print(sentence_embedding.size())
+        print(sentence_encoding.size())
+        sent_array = np.array(sent)
+        nonseparator_indices = np.where((sent_array != '[SEP]') & (sent_array != '[CLS]'))[0].tolist()
+        return sentence_encoding[nonseparator_indices,:], sentence_embedding[nonseparator_indices, :]
+
+    def add_separators(self, sents):
+        sents_with_separators = ['[CLS]'] + flatten([sent + ['[SEP]'] for sent in sents])
+        return sents_with_separators
+
+    def get_encoded_sentences(self, doc):
+        sents_with_separators = self.add_separators(doc.sents)
+        sentence_encoding, sentence_embedding = self.embed(sents_with_separators)
+        return sentence_encoding, sentence_embedding
+        
+
 class CorefScore(nn.Module):
     """ Super class to compute coreference links between spans
     """
@@ -402,16 +440,17 @@ class CorefScore(nn.Module):
         super().__init__()
 
         # Forward and backward pass over the document
-        attn_dim = hidden_dim*2
+        attn_dim = hidden_dim
 
         # Forward and backward passes, avg'd attn over embeddings, span width
-        gi_dim = attn_dim*2 + embeds_dim + distance_dim
+        gi_dim = attn_dim + embeds_dim + distance_dim
 
         # gi, gj, gi*gj, distance between gi and gj
         gij_dim = gi_dim*3 + distance_dim + genre_dim + speaker_dim
 
         # Initialize modules
-        self.encoder = DocumentEncoder(hidden_dim, char_filters)
+        # self.encoder = DocumentEncoder(hidden_dim, char_filters)
+        self.encoder = BERTDocumentEncoder()
         self.score_spans = MentionScore(gi_dim, attn_dim, distance_dim)
         self.score_pairs = PairwiseScore(gij_dim, distance_dim, genre_dim, speaker_dim)
 
@@ -421,8 +460,11 @@ class CorefScore(nn.Module):
             Predict pairwise coreference scores
         """
         # Encode the document, keep the LSTM hidden states and embedded tokens
-        states, embeds = self.encoder(doc)
-
+        # states, embeds = self.encoder(doc)
+        # print(states.size())
+        # print(embeds.size())
+        # assert False
+        states, embeds = self.encoder.get_encoded_sentences(doc)
         # Get mention scores for each span, prune
         spans, g_i, mention_scores = self.score_spans(states, embeds, doc)
 
@@ -470,7 +512,7 @@ class Trainer:
 
     def train_epoch(self, epoch):
         """ Run a training epoch over 'steps' documents """
-
+        print("Training an Epoch")
         # Set model to train (enables dropout)
         self.model.train()
 
@@ -539,7 +581,6 @@ class Trainer:
                 print("Found mention {}".format(' '.join(document.tokens[span.i1:span.i2+1])))
                 # Check which of these tuples are in the gold set, if any
                 
-                #print((' '.join(document.tokens[s[0][0]:(s[0][1]+1)]), ' '.join(document.tokens[s[1][0]:(s[1][1]+1)])) for i, s in enumerate(span.yi_idx))
                 golds = [
                     i for i, link in enumerate(span.yi_idx)
                     if link in gold_corefs
@@ -573,7 +614,6 @@ class Trainer:
 
     def evaluate(self, val_corpus, eval_script='../src/eval/scorer.pl'):
         """ Evaluate a corpus of CoNLL-2012 gold files """
-
         # Predict files
         print('Evaluating on validation corpus...')
         predicted_docs = [self.predict(doc) for doc in tqdm(val_corpus)]
@@ -590,7 +630,7 @@ class Trainer:
         results = str(stdout).split('TOTALS')[-1]
 
         # Write the results out for later viewing
-        with open('../preds/results2.txt', 'w+') as f:
+        with open('../preds/results.txt', 'a+') as f:
             f.write(results)
             f.write('\n\n\n')
 
@@ -712,7 +752,7 @@ class Trainer:
         self.model.eval()
 
 # # Initialize model, train
-model = CorefScore(embeds_dim=400, hidden_dim=200)
+model = CorefScore(embeds_dim=768, hidden_dim=768)
 trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)
 trainer.train(150)
 # # ?? train for 150 epochs, each each train 100 documents
@@ -720,8 +760,10 @@ trainer.train(150)
 
 # trainer.load_model("/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/2019-03-15_16:55:49.215081.pth")
 # trainer.train(90)
-# trainer.load_model_vanilla('/Users/arts/Desktop/cs224n/gap-coreference/2019-03-15_19:08:38.726141.pth')
+# trainer.load_model('/Users/arts/Desktop/cs224n/gap-coreference/coreference-resolution/src/2019-03-17_06:57:42.936287.pth')
 # trainer.model_in_eval()
+# results = trainer.evaluate(val_corpus, '../src/eval/scorer.pl')
+# print(str(results))
 
 # model = CorefScore(embeds_dim=400, hidden_dim=200)
 # trainer = Trainer(model, train_corpus, val_corpus, test_corpus, steps=100)

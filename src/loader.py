@@ -5,10 +5,12 @@ from torchtext.vocab import Vectors
 from torch.autograd import Variable
 
 import os, io, re, attr, random
+import numpy as np
 from fnmatch import fnmatch
 from copy import deepcopy as c
 from boltons.iterutils import pairwise
 from cached_property import cached_property
+from pytorch_pretrained_bert import BertTokenizer
 
 from utils import *
 
@@ -17,7 +19,8 @@ NORMALIZE_DICT = {"/.": ".", "/?": "?",
                   "-LCB-": "{", "-RCB-": "}",
                   "-LSB-": "[", "-RSB-": "]"}
 REMOVED_CHAR = ["/", "%", "*"]
-IS_VM = True
+IS_VM = False
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 class Corpus:
     def __init__(self, documents):
@@ -86,10 +89,18 @@ class Document:
                     speaker=self.speaker(i), genre=self.genre)
                 for idx, i in enumerate(compute_idx_spans(self.sents))]
 
-    def truncate(self, MAX=50):
+    def truncate(self, MAX=50, TOKEN_MAX=512):
         """ Randomly truncate the document to up to MAX sentences """
-        if len(self.sents) > MAX:
-            i = random.sample(range(MAX, len(self.sents)), 1)[0]
+        too_many_sentences = len(self.sents) > MAX
+        too_many_tokens = len(tokenizer.tokenize(' '.join(flatten(self.sents)))) > TOKEN_MAX
+        if too_many_sentences or too_many_tokens:
+            i = 50
+            if too_many_tokens:
+                i = random.sample(range(MAX, len(self.sents)), 1)[0]
+            while (len(flatten(self.sents[i-MAX:i])) + len(self.sents[i-MAX:i]) + 1) > TOKEN_MAX:
+                MAX -= 1
+            while (len(tokenizer.tokenize(' '.join(flatten(self.sents[i-MAX:i])))) + len(self.sents[i-MAX:i]) + 1) > TOKEN_MAX:
+                MAX -= 1
             tokens = flatten(self.sents[i-MAX:i])
             displaced_start_token_idx = len(flatten(self.sents[:i-MAX]))
             displaced_end_token_idx = len(flatten(self.sents[:i]))
@@ -237,7 +248,8 @@ class LazyVectors:
 
 def read_corpus(dirname):
     conll_files = parse_filenames(dirname=dirname, pattern="*gold_conll")
-    return Corpus(flatten([load_file(file) for file in conll_files]))
+    corpus = Corpus(flatten([load_file(file) for file in conll_files]))
+    return corpus
 
 def load_file(filename):
     """ Load a *._conll file
@@ -305,7 +317,6 @@ def load_file(filename):
 
                 index += 1
             else:
-
                 # Beginning of Document, beginning of file, end of file: nothing to scrape off
                 continue
 
