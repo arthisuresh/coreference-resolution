@@ -35,9 +35,6 @@ with torch.no_grad():
     encoded_layers, _ = model(tokens_tensor)
 # We have a hidden states for each of the 12 layers in model bert-base-uncased
 assert len(encoded_layers) == 12
-# print(torch.mean(torch.squeeze(torch.stack(encoded_layers[8:12])), dim=0).size())
-# for i in range(12):
-#     print(model.encoder.layer[i].attention.self.attention_scores.size())
 
 tokenized_ents = [tokenizer.tokenize(ent.text) for ent in processed.ents]
 n_layers = 12
